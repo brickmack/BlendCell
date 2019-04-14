@@ -1,4 +1,12 @@
-#cellular automata visualization tool. Version 0.1
+bl_info = {
+	"name": "BlendCell",
+	"author": "Mackenzie Crawford",
+	"version": (0, 2),
+	"blender": (2, 79, 0),
+	"description": "Visualization tool for cellular automata",
+	"warning": "",
+	"tracker_url": "",
+	"category": "3D View"}
 
 import bpy
 
@@ -104,44 +112,120 @@ def createMaterial():
     links.new(node_diffuse_2.outputs[0], node_mix.inputs[2]) #diffuse 2 to mix
     
     return mat
+	
+class BuildGrid(bpy.types.Operator):
+	bl_idname = "object.build_grid"
+	bl_label = "Build grid"
+	bl_options = {'REGISTER', 'UNDO'}
+	
+	count = bpy.props.IntProperty(name="Count", default=12, min=3, max=2147483647)
+	cellWidth = bpy.props.FloatProperty(name="Cell width", default=2, min=0, max=2147483647)
+	gapWidth = bpy.props.FloatProperty(name="Gap width", default=1, min=0, max=2147483647)
+	
+	def execute(self, context):
+		offset = count * (cubeWidth + gap) / 2 - cubeWidth + (gap/2)
 
-offset = count * (cubeWidth + gap) / 2 - cubeWidth + (gap/2)
+		#create parent empty
+		parent = bpy.data.objects.new("Parent", None)
+		bpy.context.scene.objects.link(parent)
+		parent.empty_draw_size = 2
+		parent.empty_draw_type = 'PLAIN_AXES'
+		
+		#we use custom properties to store the grid configuration information for later use
+		parent["count"] = count
+		parent["cellWidth"] = cellWidth
+		parent["gapWidth"] = gapWidth
 
-#create parent empty
-parent = bpy.data.objects.new("Parent", None)
-bpy.context.scene.objects.link(parent)
-parent.empty_draw_size = 2
-parent.empty_draw_type = 'PLAIN_AXES'
+		mat = findMaterial()
 
-mat = findMaterial()
+		Matrix = [[0 for x in range(count)] for y in range(count)]
+		occupied = [[7, 7], [8,6], [8,5], [7,5], [6,5]] #glider
 
-Matrix = [[0 for x in range(count)] for y in range(count)]
-occupied = [[7, 7], [8,6], [8,5], [7,5], [6,5]] #glider
+		for xIndex in range(0, count):
+			x = (xIndex) * (cubeWidth + gap) - offset
+			for yIndex in range(0, count):
+				y = (yIndex) * (cubeWidth + gap) - offset
+				z = 0
+				bpy.ops.mesh.primitive_cube_add(location=(x,y,z), radius=cubeWidth/2)
+				bpy.context.active_object.name = "Cell " + str(xIndex) + ", " + str(yIndex)
+				Matrix[xIndex][yIndex] = bpy.context.active_object
+				
+				#set material
+				Matrix[xIndex][yIndex].data.materials.append(mat)
+				Matrix[xIndex][yIndex].pass_index = 0
+			
+				#set parent
+				Matrix[xIndex][yIndex].parent = parent
 
-for xIndex in range(0, count):
-    x = (xIndex) * (cubeWidth + gap) - offset
-    for yIndex in range(0, count):
-        y = (yIndex) * (cubeWidth + gap) - offset
-        z = 0
-        bpy.ops.mesh.primitive_cube_add(location=(x,y,z), radius=cubeWidth/2)
-        bpy.context.active_object.name = "Cell " + str(xIndex) + ", " + str(yIndex)
-        Matrix[xIndex][yIndex] = bpy.context.active_object
-        
-        #set material
-        Matrix[xIndex][yIndex].data.materials.append(mat)
-        Matrix[xIndex][yIndex].pass_index = 0
-    
-        #set parent
-        Matrix[xIndex][yIndex].parent = parent
+		#highlight initial live cells
+		for pair in occupied:
+			Matrix[pair[0]][pair[1]].pass_index = 1
 
-#highlight initial live cells
-for pair in occupied:
-    Matrix[pair[0]][pair[1]].pass_index = 1
+		#set initial keyframe for all cells
+		for x in range(0, count):
+			for y in range(0, count):
+				Matrix[x][y].keyframe_insert(data_path="pass_index", frame=0)
+		
+		return {'FINISHED'}
+	
+class RunSimOP(bpy.types.Operator):
+	bl_idname = "object.run_sim"
+	bl_label = "Run simulation"
+	bl_options = {'REGISTER', 'UNDO'}
+	
+	def execute(self, context):
+		offset = count * (cubeWidth + gap) / 2 - cubeWidth + (gap/2)
 
-#set initial keyframe for all cells
-for x in range(0, count):
-    for y in range(0, count):
-        Matrix[x][y].keyframe_insert(data_path="pass_index", frame=0)
+		#create parent empty
+		parent = bpy.data.objects.new("Parent", None)
+		bpy.context.scene.objects.link(parent)
+		parent.empty_draw_size = 2
+		parent.empty_draw_type = 'PLAIN_AXES'
 
-for step in range(1, steps):
-    stepForward(Matrix, count, step)
+		mat = findMaterial()
+
+		Matrix = [[0 for x in range(count)] for y in range(count)]
+		occupied = [[7, 7], [8,6], [8,5], [7,5], [6,5]] #glider
+
+		for xIndex in range(0, count):
+			x = (xIndex) * (cubeWidth + gap) - offset
+			for yIndex in range(0, count):
+				y = (yIndex) * (cubeWidth + gap) - offset
+				z = 0
+				bpy.ops.mesh.primitive_cube_add(location=(x,y,z), radius=cubeWidth/2)
+				bpy.context.active_object.name = "Cell " + str(xIndex) + ", " + str(yIndex)
+				Matrix[xIndex][yIndex] = bpy.context.active_object
+				
+				#set material
+				Matrix[xIndex][yIndex].data.materials.append(mat)
+				Matrix[xIndex][yIndex].pass_index = 0
+			
+				#set parent
+				Matrix[xIndex][yIndex].parent = parent
+
+		#highlight initial live cells
+		for pair in occupied:
+			Matrix[pair[0]][pair[1]].pass_index = 1
+
+		#set initial keyframe for all cells
+		for x in range(0, count):
+			for y in range(0, count):
+				Matrix[x][y].keyframe_insert(data_path="pass_index", frame=0)
+
+		for step in range(1, steps):
+			stepForward(Matrix, count, step)
+			
+		return {'FINISHED'}
+
+def register():
+	from bpy.utils import register_class
+	register_class(RunSimOP)
+	register_class(BuildGrid)
+	
+def unregister():
+	from bpy.utils import unregister_class
+	unregister_class(RunSimOP)
+	unregister_class(BuildGrid)
+
+if __name__ == "__main__":
+	register()

@@ -6,7 +6,7 @@ Version 0.1
 
 ## Usage:
 
-Currently only available as a script, must be manually run and parameters are all hard-coded. Cells are represented as cubes, and render visibility is turned off/on depending on whether the cell is live or not (color changing as an alternate representation is in progress). Generates keyframes so it can be rendered as an animation (currently you MUST render it to view, doesn't work in the viewport)
+Currently only available as a script, must be manually run and parameters are all hard-coded. Cells are represented as cubes. Cell aliveness is indicated by object pass_index controlling a mix shader node in a material. Generates keyframes so it can be rendered as an animation (currently you MUST render it to view, doesn't work in the viewport)
 
 ## Planned features:
 
@@ -32,7 +32,13 @@ Currently only available as a script, must be manually run and parameters are al
 
 * Keyframing is not optimal, adds unneccessary keyframes to cells which have not changed
 
-##Changelog:
+## Changelog:
+
+### 0.2:
+
+* Converted to blender addon instead of standalone script
+
+* Demo code for custom properties, separate initialize/run/reset functions, etc
 
 ### 0.1:
 
