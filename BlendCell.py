@@ -1,11 +1,11 @@
-#cellular automata visualization tool. Version 0.0
+#cellular automata visualization tool. Version 0.1
 
 import bpy
 
-count = 15
+count = 12
 cubeWidth = 2
 gap = 1
-displayMode = 0 #0 for show/hide living/dead cells, 1 for material highlighting
+steps = 50
 
 def stepForward(Matrix, n, t):
     newMatrix = [[0 for x in range(n)] for y in range(n)] #stores born/live/die = 1/0/-1 for each cell in the next step, NOT a reference to the cells themselves
@@ -13,27 +13,26 @@ def stepForward(Matrix, n, t):
     for i in range(n):
         for j in range(n):
             #compute 8-neighbor sum using toroidal boundary conditions - x and y wrap around so that the simulaton takes place on a toroidal surface
-                         
             total = 0
-            if Matrix[i][(j-1)%n].hide_render == False:
+            if Matrix[i][(j-1)%n].pass_index == 1:
                 total = total + 1
-            if Matrix[i][(j+1)%n].hide_render == False:
+            if Matrix[i][(j+1)%n].pass_index == 1:
                 total = total + 1
-            if Matrix[(i-1)%n][j].hide_render == False:
+            if Matrix[(i-1)%n][j].pass_index == 1:
                 total = total + 1
-            if Matrix[(i+1)%n][j].hide_render == False:
+            if Matrix[(i+1)%n][j].pass_index == 1:
                 total = total + 1
-            if Matrix[(i-1)%n][(j-1)%n].hide_render == False:
+            if Matrix[(i-1)%n][(j-1)%n].pass_index == 1:
                 total = total + 1
-            if Matrix[(i-1)%n][(j+1)%n].hide_render == False:
+            if Matrix[(i-1)%n][(j+1)%n].pass_index == 1:
                 total = total + 1
-            if Matrix[(i+1)%n][(j-1)%n].hide_render == False:
+            if Matrix[(i+1)%n][(j-1)%n].pass_index == 1:
                 total = total + 1
-            if Matrix[(i+1)%n][(j+1)%n].hide_render == False:
+            if Matrix[(i+1)%n][(j+1)%n].pass_index == 1:
                 total = total + 1
-            
+        
             #apply conways rules
-            if Matrix[i][j].hide_render == False:
+            if Matrix[i][j].pass_index == 1:
                 if (total < 2) or (total > 3):
                     #die
                     newMatrix[i][j] = -1
@@ -44,48 +43,79 @@ def stepForward(Matrix, n, t):
             #otherwise, newMatrix[i][j] = 0/continue living
 
     #now we have the next set of cell states, apply them to the cells themselves
-    if displayMode == 0: #show/hide mode
-        for i in range(0, n):
-            for j in range(0, n):
-                if newMatrix[i][j] == 1:
-                    Matrix[i][j].hide_render = False
-                elif newMatrix[i][j] == -1:
-                    Matrix[i][j].hide_render = True
-                
-        #set next keyframe for all cells
-        for x in range(0, count):
-            for y in range(0, count):
-                Matrix[x][y].keyframe_insert(data_path="hide_render", frame=t)
-    elif displayMode == 1:
-        for i in range(0, n):
-            for j in range(0, n):
-                if newMatrix[i][j] == 1:
-                    Matrix[i][j].data.materials[0] = liveMat
-                elif newMatrix[i][j] == -1:
-                    Matrix[i][j].data.materials[0] = mat
-        
-        #set next keyframe for all cells
-        for x in range(0, count):
-            for y in range(0, count):
-                Matrix[x][y].keyframe_insert(data_path="active_material_index", frame=t)
+    for i in range(0, n):
+        for j in range(0, n):
+            if newMatrix[i][j] == 1:
+                Matrix[i][j].pass_index = 1
+            elif newMatrix[i][j] == -1:
+                Matrix[i][j].pass_index = 0
+    
+    #set next keyframe for all cells
+    for x in range(0, count):
+        for y in range(0, count):
+            Matrix[x][y].keyframe_insert(data_path="pass_index", frame=t)
+            
+def findMaterial():
+    #first check if a BlendCell material is already set
+    mat = bpy.data.materials.get("BlendCell material")
+    if mat is None:
+        #create the material
+        return createMaterial()
+    
+    return mat
+
+def createMaterial():
+    mat = bpy.data.materials.new(name="BlendCell material")
+
+    mat.use_nodes = True
+    nodes = mat.node_tree.nodes
+
+    #clear all nodes to start clean
+    for node in nodes:
+        nodes.remove(node)
+
+    #create mix shader node
+    node_mix = nodes.new(type='ShaderNodeMixShader')
+    node_mix.location = 200,0
+
+    #create first diffuse node
+    node_diffuse_1 = nodes.new(type='ShaderNodeBsdfDiffuse')
+    node_diffuse_1.inputs[0].default_value = (0, 1, 0, 1) #green RGBA
+    node_diffuse_1.location = 0,0
+
+    #create second diffuse node
+    node_diffuse_2 = nodes.new(type='ShaderNodeBsdfDiffuse')
+    node_diffuse_2.inputs[0].default_value = (1, 0, 0, 1) #red RGBA
+    node_diffuse_1.location = 0,200
+
+    #create object info node
+    node_obj_info = nodes.new(type='ShaderNodeObjectInfo')
+    node_obj_info.location = 0,400
+
+    #create output node
+    node_output = nodes.new(type='ShaderNodeOutputMaterial')   
+    node_output.location = 400,0
+
+    #create links between nodes
+    links = mat.node_tree.links
+    links.new(node_mix.outputs[0], node_output.inputs[0]) #mix to output
+    links.new(node_obj_info.outputs[1], node_mix.inputs[0]) #object info to mix
+    links.new(node_diffuse_1.outputs[0], node_mix.inputs[1]) #diffuse 1 to mix
+    links.new(node_diffuse_2.outputs[0], node_mix.inputs[2]) #diffuse 2 to mix
+    
+    return mat
 
 offset = count * (cubeWidth + gap) / 2 - cubeWidth + (gap/2)
 
-#empty cell color. Used regardless of displayMode
-mat = bpy.data.materials.new(name="Cell")
-mat.diffuse_color = (0, 0, 0)
+#create parent empty
+parent = bpy.data.objects.new("Parent", None)
+bpy.context.scene.objects.link(parent)
+parent.empty_draw_size = 2
+parent.empty_draw_type = 'PLAIN_AXES'
 
-if displayMode == 1: #color living/dead cells
-    #live cell color
-    liveMat = bpy.data.materials.new(name="Live Cell")
-    liveMat.diffuse_color = (1, 0, 0)
+mat = findMaterial()
 
 Matrix = [[0 for x in range(count)] for y in range(count)]
-#occupied = [[1, 2], [1, 3], [2, 4]]
-#occupied = [[0, 0], [1, 1], [2, 2]]
-#occupied = [[3, 1], [3, 2], [3, 3]]
-#occupied = [[4, 4], [5,3], [6,3], [6,4], [6,5]] #oscillates
-#occupied = [[5,5], [6,5], [5,4], [7,3], [7,4], [6,3]] #ship
 occupied = [[7, 7], [8,6], [8,5], [7,5], [6,5]] #glider
 
 for xIndex in range(0, count):
@@ -97,29 +127,21 @@ for xIndex in range(0, count):
         bpy.context.active_object.name = "Cell " + str(xIndex) + ", " + str(yIndex)
         Matrix[xIndex][yIndex] = bpy.context.active_object
         
-        #hide by default
-        Matrix[xIndex][yIndex].hide_render = True
-        
         #set material
         Matrix[xIndex][yIndex].data.materials.append(mat)
+        Matrix[xIndex][yIndex].pass_index = 0
+    
+        #set parent
+        Matrix[xIndex][yIndex].parent = parent
 
-for x in range(0, count):
-    for y in range(0, count):
-        print(Matrix[x][y].name)
-
-if displayMode == 0:
-    #set initial visible cells    
-    for pair in occupied:
-       Matrix[pair[0]][pair[1]].hide_render = False
-elif displayMode == 1:
-    #highlight initial live cells
-    for pair in occupied:
-        Matrix[pair[0]][pair[1]].data.materials[0] = liveMat
+#highlight initial live cells
+for pair in occupied:
+    Matrix[pair[0]][pair[1]].pass_index = 1
 
 #set initial keyframe for all cells
 for x in range(0, count):
     for y in range(0, count):
-        Matrix[x][y].keyframe_insert(data_path="hide_render", frame=0)
+        Matrix[x][y].keyframe_insert(data_path="pass_index", frame=0)
 
-for step in range(1, 10):
+for step in range(1, steps):
     stepForward(Matrix, count, step)
