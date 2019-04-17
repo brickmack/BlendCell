@@ -1,7 +1,7 @@
 bl_info = {
 	"name": "BlendCell",
 	"author": "Mackenzie Crawford",
-	"version": (0, 2),
+	"version": (0, 3),
 	"blender": (2, 79, 0),
 	"description": "Visualization tool for cellular automata",
 	"warning": "",
@@ -9,11 +9,7 @@ bl_info = {
 	"category": "3D View"}
 
 import bpy
-
-count = 12
-cubeWidth = 2
-gap = 1
-steps = 50
+import re
 
 def stepForward(Matrix, n, t):
     newMatrix = [[0 for x in range(n)] for y in range(n)] #stores born/live/die = 1/0/-1 for each cell in the next step, NOT a reference to the cells themselves
@@ -59,8 +55,8 @@ def stepForward(Matrix, n, t):
                 Matrix[i][j].pass_index = 0
     
     #set next keyframe for all cells
-    for x in range(0, count):
-        for y in range(0, count):
+    for x in range(0, n):
+        for y in range(0, n):
             Matrix[x][y].keyframe_insert(data_path="pass_index", frame=t)
             
 def findMaterial():
@@ -119,11 +115,11 @@ class BuildGrid(bpy.types.Operator):
 	bl_options = {'REGISTER', 'UNDO'}
 	
 	count = bpy.props.IntProperty(name="Count", default=12, min=3, max=2147483647)
-	cellWidth = bpy.props.FloatProperty(name="Cell width", default=2, min=0, max=2147483647)
-	gapWidth = bpy.props.FloatProperty(name="Gap width", default=1, min=0, max=2147483647)
+	cubeWidth = bpy.props.FloatProperty(name="Cell width", default=2, min=0, max=2147483647)
+	gap = bpy.props.FloatProperty(name="Gap width", default=1, min=0, max=2147483647)
 	
 	def execute(self, context):
-		offset = count * (cubeWidth + gap) / 2 - cubeWidth + (gap/2)
+		offset = self.count * (self.cubeWidth + self.gap) / 2 - self.cubeWidth + (self.gap/2)
 
 		#create parent empty
 		parent = bpy.data.objects.new("Parent", None)
@@ -132,21 +128,21 @@ class BuildGrid(bpy.types.Operator):
 		parent.empty_draw_type = 'PLAIN_AXES'
 		
 		#we use custom properties to store the grid configuration information for later use
-		parent["count"] = count
-		parent["cellWidth"] = cellWidth
-		parent["gapWidth"] = gapWidth
+		parent["count"] = self.count
+		parent["cellWidth"] = self.cubeWidth
+		parent["gapWidth"] = self.gap
 
 		mat = findMaterial()
 
-		Matrix = [[0 for x in range(count)] for y in range(count)]
+		Matrix = [[0 for x in range(self.count)] for y in range(self.count)]
 		occupied = [[7, 7], [8,6], [8,5], [7,5], [6,5]] #glider
 
-		for xIndex in range(0, count):
-			x = (xIndex) * (cubeWidth + gap) - offset
-			for yIndex in range(0, count):
-				y = (yIndex) * (cubeWidth + gap) - offset
+		for xIndex in range(0, self.count):
+			x = (xIndex) * (self.cubeWidth + self.gap) - offset
+			for yIndex in range(0, self.count):
+				y = (yIndex) * (self.cubeWidth + self.gap) - offset
 				z = 0
-				bpy.ops.mesh.primitive_cube_add(location=(x,y,z), radius=cubeWidth/2)
+				bpy.ops.mesh.primitive_cube_add(location=(x,y,z), radius=self.cubeWidth/2)
 				bpy.context.active_object.name = "Cell " + str(xIndex) + ", " + str(yIndex)
 				Matrix[xIndex][yIndex] = bpy.context.active_object
 				
@@ -162,18 +158,59 @@ class BuildGrid(bpy.types.Operator):
 			Matrix[pair[0]][pair[1]].pass_index = 1
 
 		#set initial keyframe for all cells
-		for x in range(0, count):
-			for y in range(0, count):
+		for x in range(0, self.count):
+			for y in range(0, self.count):
 				Matrix[x][y].keyframe_insert(data_path="pass_index", frame=0)
 		
 		return {'FINISHED'}
-	
+		
 class RunSimOP(bpy.types.Operator):
 	bl_idname = "object.run_sim"
 	bl_label = "Run simulation"
 	bl_options = {'REGISTER', 'UNDO'}
 	
+	@classmethod
+	def poll(cls, context):
+		selected = bpy.context.selected_objects
+		if (selected is not None) and (len(selected) == 1) and (selected[0].type == "EMPTY"):
+			return True
+		
+		return False
+	
 	def execute(self, context):
+		#get the cells (children of the parent empty) and data (custom properties of the empty)
+		selected = bpy.context.selected_objects
+		parent = selected[0]
+		count = parent["count"]
+		
+		#get all children of the parent empty
+		children = parent.children
+			
+		#these may be out of order, so we need to place them back in a 2d array with the same structure as the original
+		Matrix = [[0 for x in range(count)] for y in range(count)]
+		for child in children:
+			coords = [int(s) for s in re.findall(r'\d+', child.name)]
+			
+			Matrix[coords[0]][coords[1]] = child
+				
+		#now that we have a properly formed matrix, we can start the simulation itself
+		for step in range(1, 10):
+			stepForward(Matrix, count, step)
+		
+		return {'FINISHED'}
+	
+class RunSimCombinedOP(bpy.types.Operator):
+	bl_idname = "object.run_sim_combined"
+	bl_label = "Run simulation COMBINED"
+	bl_options = {'REGISTER', 'UNDO'}
+	
+	def execute(self, context):
+		#hardcoded for testing
+		count = 12
+		cubeWidth = 2
+		gap = 1
+		steps = 50
+	
 		offset = count * (cubeWidth + gap) / 2 - cubeWidth + (gap/2)
 
 		#create parent empty
@@ -219,11 +256,13 @@ class RunSimOP(bpy.types.Operator):
 
 def register():
 	from bpy.utils import register_class
+	register_class(RunSimCombinedOP)
 	register_class(RunSimOP)
 	register_class(BuildGrid)
 	
 def unregister():
 	from bpy.utils import unregister_class
+	unregister_class(RunSimCombinedOP)
 	unregister_class(RunSimOP)
 	unregister_class(BuildGrid)
 

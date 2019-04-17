@@ -2,7 +2,7 @@
 
 Blender python addon for visualization of cellular automata.
 
-Version 0.1
+Version 0.2
 
 ## Usage:
 
@@ -13,8 +13,6 @@ Currently only available as a script, must be manually run and parameters are al
 * 2d and 3d versions
 
 * configurable rules (currently uses the standard Conway's Game of Life rules)
-
-* Addon instead of independent script
 
 * multiple boundary handling modes (infinite grid with finite/infinite display, non-crossable boundary, toroidal projection on finite grid). Currently only toroidal projection is supported
 
@@ -32,7 +30,15 @@ Currently only available as a script, must be manually run and parameters are al
 
 * Keyframing is not optimal, adds unneccessary keyframes to cells which have not changed
 
+* Matrix reconstruction in RunSimOP is not optimal. Should store coordinates in custom object properties. Safer, much faster
+
 ## Changelog:
+
+### 0.3:
+
+* Fix incorrect variable scope
+
+* Add function to run simulation after grid has been set up
 
 ### 0.2:
 
